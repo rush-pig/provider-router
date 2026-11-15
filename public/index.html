@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#171a18" />
+    <meta
+      name="description"
+      content="Provider Router：本地多提供商模型网关、模型目录与路由控制台。"
+    />
+    <title>Provider Router · 模型路由控制台</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <svg class="svg-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="icon-overview" viewBox="0 0 24 24">
+        <rect x="3.5" y="3.5" width="7" height="7" rx="1" />
+        <rect x="13.5" y="3.5" width="7" height="7" rx="1" />
+        <rect x="3.5" y="13.5" width="7" height="7" rx="1" />
+        <rect x="13.5" y="13.5" width="7" height="7" rx="1" />
+      </symbol>
+      <symbol id="icon-providers" viewBox="0 0 24 24">
+        <circle cx="5" cy="12" r="2.5" />
+        <circle cx="19" cy="6" r="2.5" />
+        <circle cx="19" cy="18" r="2.5" />
+        <path d="M7.4 10.9 16.6 7M7.4 13.1l9.2 3.9" />
+      </symbol>
+      <symbol id="icon-models" viewBox="0 0 24 24">
+        <path d="m12 3 8.5 4.5L12 12 3.5 7.5 12 3Z" />
+        <path d="m4 12 8 4.3 8-4.3M4 16.5l8 4.3 8-4.3" />
+      </symbol>
+      <symbol id="icon-logs" viewBox="0 0 24 24">
+        <rect x="3" y="4.5" width="18" height="15" rx="1.5" />
+        <path d="m7 9 3 3-3 3M12.5 15H17" />
+      </symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24">
+        <path d="M4 7h7M15 7h5M4 17h5M13 17h7M4 12h11M19 12h1" />
+        <circle cx="13" cy="7" r="2" />
+        <circle cx="11" cy="17" r="2" />
+        <circle cx="17" cy="12" r="2" />
+      </symbol>
+      <symbol id="icon-plus" viewBox="0 0 24 24">
+        <path d="M12 5v14M5 12h14" />
+      </symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24">
+        <path d="M20 7v5h-5M4 17v-5h5" />
+        <path d="M6.1 9A7 7 0 0 1 18 7l2 5M4 12l2 5a7 7 0 0 0 11.9-2" />
+      </symbol>
+      <symbol id="icon-copy" viewBox="0 0 24 24">
+        <rect x="8" y="8" width="12" height="12" rx="1.5" />
+        <path d="M16 8V6.5A1.5 1.5 0 0 0 14.5 5h-9A1.5 1.5 0 0 0 4 6.5v9A1.5 1.5 0 0 0 5.5 17H8" />
+      </symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24">
+        <path d="m6 6 12 12M18 6 6 18" />
+      </symbol>
+      <symbol id="icon-edit" viewBox="0 0 24 24">
+        <path d="m14.5 5.5 4 4M4 20l4.5-1 11-11a2.8 2.8 0 0 0-4-4l-11 11L4 20Z" />
+      </symbol>
+      <symbol id="icon-trash" viewBox="0 0 24 24">
+        <path d="M4 7h16M9 7V4.8h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5" />
+      </symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24">
+        <circle cx="10.5" cy="10.5" r="6.5" />
+        <path d="m15.5 15.5 5 5" />
+      </symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24">
+        <path d="m5 12.5 4.5 4.5L19 7" />
+      </symbol>
+      <symbol id="icon-arrow" viewBox="0 0 24 24">
+        <path d="M5 12h14M13 6l6 6-6 6" />
+      </symbol>
+      <symbol id="icon-key" viewBox="0 0 24 24">
+        <circle cx="8" cy="12" r="4" />
+        <path d="M12 12h9M17 12v3M20 12v2" />
+      </symbol>
+      <symbol id="icon-power" viewBox="0 0 24 24">
+        <path d="M12 3v9" />
+        <path d="M6.2 6.2a8 8 0 1 0 11.6 0" />
+      </symbol>
+    </svg>
+
+    <div class="shell">
+      <aside class="rail">
+        <a class="brand" href="#overview" aria-label="Provider Router 概览">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32">
+              <path d="M5 8h8v16H5zM19 5h8v8h-8zM19 19h8v8h-8z" />
+              <path d="M13 9h6M13 23h6" fill="none" stroke="currentColor" stroke-width="2" />
+            </svg>
+          </span>
+          <span class="brand-type">
+            <strong>Provider</strong>
+            <strong>Router</strong>
+            <small>模型路由控制台</small>
+          </span>
+        </a>
+
+        <nav class="nav" aria-label="主导航">
+          <button class="nav-item is-active" type="button" data-view="overview" aria-current="page">
+            <svg class="icon"><use href="#icon-overview"></use></svg>
+            <span>概览</span>
+          </button>
+          <button class="nav-item" type="button" data-view="providers">
+            <svg class="icon"><use href="#icon-providers"></use></svg>
+            <span>提供商</span>
+          </button>
+          <button class="nav-item" type="button" data-view="models">
+            <svg class="icon"><use href="#icon-models"></use></svg>
+            <span>模型目录</span>
+          </button>
+          <button class="nav-item" type="button" data-view="logs">
+            <svg class="icon"><use href="#icon-logs"></use></svg>
+            <span>请求日志</span>
+          </button>
+          <button class="nav-item" type="button" data-view="settings">
+            <svg class="icon"><use href="#icon-settings"></use></svg>
+            <span>设置</span>
+          </button>
+        </nav>
+
+        <div class="rail-status">
+          <span class="status-light" aria-hidden="true"></span>
+          <div>
+            <span>服务运行中</span>
+            <code id="rail-version">v—</code>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="title-block">
+            <p class="title-kicker" id="view-kicker">控制台 / 概览</p>
+            <h1 id="view-title">概览</h1>
+          </div>
+          <div class="top-actions">
+            <button class="endpoint-button" type="button" data-copy-target="gateway-url" title="复制网关地址">
+              <span class="endpoint-label">网关</span>
+              <code id="gateway-url">—</code>
+              <svg class="icon"><use href="#icon-copy"></use></svg>
+            </button>
+            <button class="icon-button" type="button" id="refresh-view" title="刷新当前页面" aria-label="刷新当前页面">
+              <svg class="icon"><use href="#icon-refresh"></use></svg>
+            </button>
+          </div>
+        </header>
+
+        <div class="banner banner-error hidden" id="boot-error" role="alert">
+          <div>
+            <strong>无法连接本地服务</strong>
+            <p id="boot-error-message">请确认 Provider Router 正在运行。</p>
+          </div>
+          <button class="button button-outline" type="button" id="retry-boot">重试</button>
+        </div>
+
+        <section class="view is-active" id="view-overview" data-view="overview">
+          <div class="overview-top">
+            <section class="hero panel">
+              <div class="hero-copy">
+                <p class="hero-mark">LOCAL · ROUTING</p>
+                <h2>一个入口，<br />路由所有模型。</h2>
+                <p class="hero-lede">
+                  下游只认 <code>provider/model</code>。网关拆出提供商，保留模型里的斜杠，
+                  按协议替换上游鉴权头后原样转发。
+                </p>
+                <div class="hero-actions">
+                  <button class="button button-dark" type="button" data-action="add-provider">
+                    <svg class="icon"><use href="#icon-plus"></use></svg>
+                    添加提供商
+                  </button>
+                  <a class="button button-quiet" href="#models">浏览模型目录</a>
+                </div>
+              </div>
+              <div class="switchboard" id="switchboard" aria-label="实时路由图"></div>
+            </section>
+
+            <aside class="ops-panel panel">
+              <div class="panel-heading">
+                <h3>网关状态</h3>
+                <span class="status-pill is-online"><i></i>运行中</span>
+              </div>
+              <dl class="ops-list">
+                <div><dt>监听</dt><dd id="ops-listen">—</dd></div>
+                <div><dt>配置</dt><dd id="ops-config" title="">—</dd></div>
+                <div><dt>pi-ai 目录</dt><dd id="ops-piai">—</dd></div>
+              </dl>
+              <div class="ops-rate">
+                <div class="ops-rate-head"><span>请求成功率</span><strong id="ops-success-rate">—</strong></div>
+                <div class="meter" aria-hidden="true"><span id="ops-success-meter"></span></div>
+                <p id="ops-request-note">还没有经过网关的请求。</p>
+              </div>
+            </aside>
+          </div>
+
+          <section class="stats-strip panel" aria-label="运行统计">
+            <div class="stat">
+              <span>提供商</span>
+              <strong id="stat-providers">0</strong>
+              <small id="stat-providers-note">全部启用</small>
+            </div>
+            <div class="stat">
+              <span>已登记模型</span>
+              <strong id="stat-models">0</strong>
+              <small>来自本地配置</small>
+            </div>
+            <div class="stat">
+              <span>已路由请求</span>
+              <strong id="stat-requests">0</strong>
+              <small id="stat-requests-note">运行以来</small>
+            </div>
+            <div class="stat">
+              <span>平均耗时</span>
+              <strong id="stat-latency">—</strong>
+              <small>完整响应耗时</small>
+            </div>
+          </section>
+
+          <div class="lower-grid">
+            <section class="panel quickstart">
+              <div class="panel-heading">
+                <h3>快速调用</h3>
+                <button class="text-button" type="button" data-copy-target="quickstart-code">复制命令</button>
+              </div>
+              <p class="panel-note">下游鉴权头可任意填写，网关会丢弃它并换成所选提供商的上游密钥。</p>
+              <pre class="code-block"><code id="quickstart-code">—</code></pre>
+            </section>
+
+            <section class="panel recent-panel">
+              <div class="panel-heading">
+                <h3>最近请求</h3>
+                <a class="text-link" href="#logs">查看全部</a>
+              </div>
+              <div class="request-list" id="recent-requests"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-providers" data-view="providers">
+          <div class="section-heading">
+            <div>
+              <h2>提供商</h2>
+              <p>注册上游 API，模型路由使用提供商名称作为第一段前缀。</p>
+            </div>
+            <button class="button button-dark" type="button" data-action="add-provider">
+              <svg class="icon"><use href="#icon-plus"></use></svg>
+              添加提供商
+            </button>
+          </div>
+          <div class="provider-list" id="provider-list"></div>
+        </section>
+
+        <section class="view" id="view-models" data-view="models">
+          <div class="section-heading">
+            <div>
+              <h2>模型目录</h2>
+              <p>汇总所有提供商的 /models 返回结果，并保留本地登记的模型。</p>
+            </div>
+            <button class="button button-outline" type="button" id="refresh-models">
+              <svg class="icon"><use href="#icon-refresh"></use></svg>
+              刷新模型
+            </button>
+          </div>
+
+          <div class="toolbar panel">
+            <label class="search-field">
+              <svg class="icon"><use href="#icon-search"></use></svg>
+              <input type="search" id="model-search" placeholder="搜索模型或提供商" autocomplete="off" />
+            </label>
+            <label class="select-field">
+              <span>提供商</span>
+              <select id="model-provider-filter">
+                <option value="">全部提供商</option>
+              </select>
+            </label>
+            <span class="toolbar-note" id="models-summary">—</span>
+          </div>
+
+          <div id="model-errors" class="error-stack"></div>
+          <div id="model-list" class="model-list"></div>
+        </section>
+
+        <section class="view" id="view-logs" data-view="logs">
+          <div class="section-heading">
+            <div>
+              <h2>请求日志</h2>
+              <p>只记录路由、状态与耗时；不记录请求头、正文或密钥。</p>
+            </div>
+            <div class="section-actions">
+              <label class="inline-check compact">
+                <input type="checkbox" id="log-autorefresh" checked />
+                自动刷新
+              </label>
+              <button class="button button-quiet" type="button" id="clear-logs">
+                <svg class="icon"><use href="#icon-trash"></use></svg>
+                清空
+              </button>
+              <button class="icon-button" type="button" id="refresh-logs" title="刷新日志" aria-label="刷新日志">
+                <svg class="icon"><use href="#icon-refresh"></use></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="toolbar panel">
+            <label class="search-field">
+              <svg class="icon"><use href="#icon-search"></use></svg>
+              <input type="search" id="log-search" placeholder="搜索模型、提供商或错误" autocomplete="off" />
+            </label>
+            <label class="select-field">
+              <span>结果</span>
+              <select id="log-status-filter">
+                <option value="">全部</option>
+                <option value="success">成功</option>
+                <option value="error">失败</option>
+                <option value="pending">进行中</option>
+              </select>
+            </label>
+            <span class="toolbar-note" id="log-count">—</span>
+          </div>
+
+          <section class="panel table-panel">
+            <div class="table-scroll">
+              <table class="data-table log-table">
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>路由模型</th>
+                    <th>提供商</th>
+                    <th>状态</th>
+                    <th>耗时</th>
+                    <th>备注</th>
+                  </tr>
+                </thead>
+                <tbody id="log-body"></tbody>
+              </table>
+            </div>
+            <div class="empty-state hidden" id="log-empty">
+              <p>还没有请求记录。</p>
+              <span>用上方快速调用示例发起一次请求，日志会出现在这里。</span>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-settings" data-view="settings">
+          <div class="section-heading">
+            <div>
+              <h2>设置</h2>
+              <p>启动方式、运行信息与模型目录状态。</p>
+            </div>
+          </div>
+
+          <div class="settings-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>开机自启</h3>
+                <span class="badge" id="autostart-scope">—</span>
+              </div>
+              <p class="panel-note">登录桌面后在后台静默启动，不弹出终端，也不会自动打开浏览器。</p>
+              <label class="switch-row">
+                <span class="switch-copy">
+                  <strong>登录时自动启动</strong>
+                  <small id="autostart-method">检测中…</small>
+                </span>
+                <input type="checkbox" id="autostart-toggle" role="switch" />
+                <span class="switch-control" aria-hidden="true"></span>
+              </label>
+              <p class="hint" id="autostart-hint"></p>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>运行信息</h3>
+                <button class="text-button" type="button" data-copy-target="settings-gateway">复制网关</button>
+              </div>
+              <dl class="info-list">
+                <div><dt>网关地址</dt><dd><code id="settings-gateway">—</code></dd></div>
+                <div><dt>配置文件</dt><dd><code id="settings-config">—</code></dd></div>
+                <div><dt>Node</dt><dd id="settings-node">—</dd></div>
+                <div><dt>平台</dt><dd id="settings-platform">—</dd></div>
+                <div><dt>版本</dt><dd id="settings-version">—</dd></div>
+                <div><dt>模型目录</dt><dd id="settings-piai">—</dd></div>
+              </dl>
+            </section>
+
+            <section class="panel settings-wide">
+              <div class="panel-heading">
+                <h3>pi-ai 模型目录</h3>
+                <span class="badge" id="settings-piai-badge">—</span>
+              </div>
+              <p class="panel-note">
+                内置目录覆盖常见提供商。安装 pi-ai 后，添加提供商时可以直接载入它维护的提供商、模型与接口信息。
+              </p>
+              <pre class="code-block small"><code>npm install @earendil-works/pi-ai</code></pre>
+              <p class="hint" id="pi-ai-hint">正在检测…</p>
+            </section>
+
+            <section class="panel settings-wide">
+              <div class="panel-heading">
+                <h3>无需登录，开机即启动</h3>
+                <span class="badge">Linux · systemd</span>
+              </div>
+              <p class="panel-note">
+                上面的开关使用桌面登录自启动。若希望服务器在开机后立刻运行、无需登录，可安装用户级 systemd 服务：
+              </p>
+              <pre class="code-block small"><code>bash scripts/install-user-service.sh
+sudo loginctl enable-linger "$USER"</code></pre>
+              <p class="hint">安装脚本会生成 ~/.config/systemd/user/provider-router.service，并启用当前用户服务。</p>
+            </section>
+
+            <section class="panel settings-wide">
+              <div class="panel-heading">
+                <h3>路由规则</h3>
+              </div>
+              <div class="rules">
+                <p><code>provider/model</code>：第一个 <code>/</code> 之前是提供商，之后完整保留给上游，因此 <code>openrouter/anthropic/claude-sonnet-4.5</code> 会路由到提供商 <code>openrouter</code>，上游模型为 <code>anthropic/claude-sonnet-4.5</code>。</p>
+                <p>请求方法、路径、查询串、请求头（逐跳头除外）和其余 JSON 字段都会保留；仅替换鉴权头与模型字段，并重新计算内容长度。</p>
+                <p>GET <code>/models</code> 或 <code>/v1/models</code> 会并发读取各提供商模型并汇总；单个提供商失败时保留其本地模型列表并报告错误。</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog class="modal" id="provider-dialog">
+      <form id="provider-form" novalidate>
+        <header class="modal-head">
+          <div>
+            <h2 id="provider-dialog-title">添加提供商</h2>
+            <p id="provider-dialog-subtitle">填写上游 API 与模型列表。</p>
+          </div>
+          <button class="icon-button" type="button" data-close-dialog aria-label="关闭">
+            <svg class="icon"><use href="#icon-close"></use></svg>
+          </button>
+        </header>
+
+        <div class="modal-body">
+          <div class="form-error hidden" id="form-error" role="alert"></div>
+
+          <label class="field" id="preset-field">
+            <span>从目录载入</span>
+            <select id="preset-select">
+              <option value="">选择一个提供商（可选）</option>
+            </select>
+            <small id="preset-hint">内置精选目录；安装 pi-ai 后会自动使用它的完整目录。</small>
+          </label>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>路由名称</span>
+              <input id="field-name" type="text" placeholder="openai" autocomplete="off" spellcheck="false" required />
+              <small>小写字母、数字、点、下划线或连字符；不能包含 /</small>
+            </label>
+            <label class="field">
+              <span>显示名称</span>
+              <input id="field-label" type="text" placeholder="OpenAI" autocomplete="off" />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>API 接口</span>
+            <input id="field-base-url" type="url" placeholder="https://api.openai.com/v1" autocomplete="off" spellcheck="false" required />
+            <small>API 基础地址，通常以 /v1 或 /v1beta 结尾，不要填写完整 endpoint。</small>
+          </label>
+
+          <label class="field">
+            <span>API Key</span>
+            <input id="field-api-key" type="password" placeholder="粘贴上游 api-key" autocomplete="new-password" spellcheck="false" />
+            <small id="key-hint">网关会用这里保存的密钥替换客户端自带的鉴权头。</small>
+          </label>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>支持协议</span>
+              <select id="field-protocol"></select>
+              <small id="protocol-hint">协议用于标识上游接口类型，网关不做消息格式转换。</small>
+            </label>
+            <label class="field">
+              <span>鉴权方式</span>
+              <select id="field-auth-style"></select>
+              <small id="auth-hint">按协议自动选择上游鉴权请求头。</small>
+            </label>
+          </div>
+
+          <label class="inline-check hidden" id="clear-key-row">
+            <input type="checkbox" id="field-clear-key" />
+            清除已保存的密钥
+          </label>
+
+          <label class="field">
+            <span>模型列表</span>
+            <textarea id="field-models" rows="7" placeholder="每行一个模型 id，可包含斜杠"></textarea>
+            <small><span id="model-count">0</span> 个模型，可逐行编辑，也可从上游拉取。</small>
+          </label>
+
+          <label class="inline-check">
+            <input type="checkbox" id="field-enabled" checked />
+            启用此提供商
+          </label>
+
+          <div class="discover-result hidden" id="discover-result"></div>
+        </div>
+
+        <footer class="modal-foot">
+          <button class="button button-quiet" type="button" id="test-provider">
+            <svg class="icon"><use href="#icon-refresh"></use></svg>
+            测试并拉取模型
+          </button>
+          <div class="spacer"></div>
+          <button class="button button-quiet" type="button" data-close-dialog>取消</button>
+          <button class="button button-dark" type="submit" id="save-provider">保存提供商</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+  </body>
+</html>

@@ -1,0 +1,258 @@
+/* Rail */
+
+.rail {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 25px 17px 19px;
+  background: var(--ink);
+  color: #f4f4ea;
+  scrollbar-width: none;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  background: var(--signal);
+  color: var(--ink);
+  border-radius: 2px;
+}
+
+.brand-mark svg {
+  width: 30px;
+  height: 30px;
+  fill: currentColor;
+}
+
+.brand-type {
+  display: grid;
+  line-height: 1;
+}
+
+.brand-type strong {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+
+.brand-type strong + strong {
+  margin-top: 2px;
+}
+
+.brand-type small {
+  margin-top: 7px;
+  color: #a7aea2;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+}
+
+.nav {
+  display: grid;
+  gap: 3px;
+  margin-top: 45px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 11px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: #aeb5a9;
+  text-align: left;
+  transition: color 130ms ease, background-color 130ms ease, border-color 130ms ease;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.045);
+  color: #f5f5eb;
+}
+
+.nav-item.is-active {
+  border-left-color: var(--signal);
+  background: rgba(240, 201, 59, 0.1);
+  color: #ffffff;
+}
+
+.nav-item span {
+  font-size: 13.5px;
+  font-weight: 560;
+}
+
+.rail-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding: 16px 8px 1px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  color: #b8bfb2;
+  font-size: 11px;
+}
+
+.rail-status > div {
+  display: grid;
+  gap: 1px;
+}
+
+.rail-status code {
+  color: #7d867a;
+  font-size: 9.5px;
+}
+
+.status-light {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: #86c9a7;
+  box-shadow: 0 0 0 3px rgba(134, 201, 167, 0.13);
+}
+
+/* Main chrome */
+
+.main {
+  width: 100%;
+  max-width: 1540px;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 28px clamp(20px, 3vw, 44px) 72px;
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+  padding-bottom: 21px;
+  border-bottom: 1px solid var(--line);
+}
+
+.title-kicker {
+  margin: 0 0 5px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+}
+
+.title-block h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(29px, 3vw, 37px);
+  font-weight: 720;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.endpoint-button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(420px, 38vw);
+  height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+  color: var(--ink);
+  transition: border-color 130ms ease, background-color 130ms ease;
+}
+
+.endpoint-button:hover {
+  border-color: var(--ink);
+  background: var(--surface-raised);
+}
+
+.endpoint-button .icon {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.endpoint-label {
+  flex: none;
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+}
+
+.endpoint-button code {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--ink);
+  transition: background-color 130ms ease, border-color 130ms ease, color 130ms ease;
+}
+
+.icon-button:hover {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.icon-button .icon {
+  width: 17px;
+  height: 17px;
+}
+
+.icon-button.is-spinning .icon,
+.button.is-spinning .icon,
+#refresh-view.is-spinning .icon {
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+body.modal-open {
+  overflow: hidden;
+}
+

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "provider-router",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["src/server.mjs", "--port", "4141", "--no-open"],
+      "port": 4141
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "provider-router",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local multi-provider model gateway with a graphical control console.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "start:silent": "node src/server.mjs --silent",
+    "test": "node --test"
+  },
+  "optionalDependencies": {
+    "@earendil-works/pi-ai": "^1.5.2"
+  }
+}
