@@ -1,10 +1,15 @@
 import { Readable } from 'node:stream';
 import { applyProviderAuth } from './auth.mjs';
+import { createStreamConverter, convertRequest, convertResponse } from './convert/index.mjs';
+import { convertErrorBody, errorEnvelopeFor } from './convert/common/errors.mjs';
+import { formatSseEvent } from './convert/common/sse.mjs';
+import { aggregateSse, synthesizeSse } from './convert/common/sse-response.mjs';
 import { joinUpstreamUrl } from './protocols.mjs';
-import { truncate } from './util.mjs';
+import { HttpError, truncate } from './util.mjs';
 
 const CONNECT_TIMEOUT_MS =
   Number(process.env.PROVIDER_ROUTER_CONNECT_TIMEOUT_MS) || 300_000;
+const MAX_CONVERTED_BYTES = 64 * 1024 * 1024;
 
 const REQUEST_HOP_BY_HOP = new Set([
   'connection',
@@ -47,7 +52,13 @@ const RESPONSE_STRIP = new Set([
   'clear-site-data',
 ]);
 
-function buildRequestHeaders(req, provider) {
+const ANTHROPIC_ONLY_HEADERS = [
+  'anthropic-version',
+  'anthropic-beta',
+  'anthropic-dangerous-direct-browser-access',
+];
+
+function buildRequestHeaders(req, provider, conversion) {
   const headers = new Headers();
 
   for (const [name, value] of Object.entries(req.headers)) {
@@ -62,6 +73,10 @@ function buildRequestHeaders(req, provider) {
   }
 
   applyProviderAuth(headers, provider);
+
+  if (conversion && conversion.to !== 'anthropic') {
+    for (const name of ANTHROPIC_ONLY_HEADERS) headers.delete(name);
+  }
 
   if (!headers.has('content-type')) headers.set('content-type', 'application/json');
   return headers;
@@ -88,9 +103,9 @@ function responseHeaders(headers) {
 }
 
 /**
- * Forwards a parsed JSON request to the selected provider. Only the API key
- * header and the `model` field change; every other request header, body field,
- * method, path and query string is preserved.
+ * Forwards a request to the selected provider. Without a conversion plan the
+ * request is passed through unchanged except for the upstream model and auth
+ * header; with one, the request and response bodies are translated.
  */
 export async function proxyRequest({
   req,
@@ -100,9 +115,11 @@ export async function proxyRequest({
   modelReference,
   pathname,
   search,
+  conversion = null,
   onComplete,
 }) {
   const startedAt = Date.now();
+  const warnings = [];
   let finished = false;
 
   const finish = (status, error = null) => {
@@ -113,6 +130,7 @@ export async function proxyRequest({
         status,
         error,
         durationMs: Date.now() - startedAt,
+        warnings,
       });
     } catch {
       // Logging must never affect the proxied response.
@@ -124,8 +142,24 @@ export async function proxyRequest({
     if (!res.writableEnded) finish(499, '客户端提前断开');
   });
 
-  const target = joinUpstreamUrl(provider.baseUrl, pathname, search);
-  const body = JSON.stringify({ ...payload, model: modelReference.model });
+  let upstreamRequestBody = { ...payload, model: modelReference.model };
+  if (conversion) {
+    const converted = convertRequest({
+      from: conversion.from,
+      to: conversion.to,
+      body: upstreamRequestBody,
+      model: modelReference.model,
+    });
+    upstreamRequestBody = converted.body;
+    if (converted.stream !== undefined && upstreamRequestBody.stream === undefined) {
+      upstreamRequestBody.stream = converted.stream;
+    }
+    warnings.push(...(converted.warnings ?? []));
+  }
+
+  const targetPath = conversion ? conversion.upstreamPath : pathname;
+  const target = joinUpstreamUrl(provider.baseUrl, targetPath, conversion ? '' : search);
+  const body = JSON.stringify(upstreamRequestBody);
 
   const controller = new AbortController();
   let timedOut = false;
@@ -148,7 +182,7 @@ export async function proxyRequest({
   try {
     upstream = await fetch(target, {
       method: req.method,
-      headers: buildRequestHeaders(req, provider),
+      headers: buildRequestHeaders(req, provider, conversion),
       body,
       redirect: 'manual',
       signal: controller.signal,
@@ -162,13 +196,13 @@ export async function proxyRequest({
 
     if (timedOut) {
       const message = `上游连接超时（${Math.round(CONNECT_TIMEOUT_MS / 1000)} 秒）`;
-      sendProxyError(res, 504, message, 'upstream_timeout');
+      sendProxyError({ res, status: 504, message, code: 'upstream_timeout' });
       finish(504, message);
       return;
     }
 
     const message = `上游请求失败：${truncate(error.message, 400)}`;
-    sendProxyError(res, 502, message, 'upstream_request_failed');
+    sendProxyError({ res, status: 502, message, code: 'upstream_request_failed' });
     finish(502, message);
     return;
   } finally {
@@ -185,6 +219,38 @@ export async function proxyRequest({
     return;
   }
 
+  if (conversion) {
+    try {
+      await writeConvertedResponse({
+        upstream,
+        res,
+        conversion,
+        request: upstreamRequestBody,
+        warnings,
+      });
+    } catch (error) {
+      if (clientClosed || res.destroyed) {
+        if (!finished) finish(499, '客户端提前断开');
+        return;
+      }
+      const status = error instanceof HttpError ? error.status : 502;
+      const message = truncate(error.message, 400);
+      sendConversionError({
+        res,
+        clientProtocol: conversion.from,
+        status,
+        message,
+        code: error.code,
+      });
+      finish(status, message);
+    }
+    return;
+  }
+
+  await pipeUpstreamResponse({ upstream, res, finish });
+}
+
+async function pipeUpstreamResponse({ upstream, res, finish }) {
   try {
     res.writeHead(upstream.status, responseHeaders(upstream.headers));
     res.flushHeaders?.();
@@ -196,7 +262,7 @@ export async function proxyRequest({
     }
     const message = `写入响应失败：${truncate(error.message, 300)}`;
     if (!res.headersSent) {
-      sendProxyError(res, 502, message, 'upstream_response_invalid');
+      sendProxyError({ res, status: 502, message, code: 'upstream_response_invalid' });
     } else {
       res.destroy(error);
     }
@@ -234,14 +300,251 @@ export async function proxyRequest({
   res.once('close', () => {
     if (!res.writableEnded) {
       nodeStream.destroy();
-      controller.abort();
     }
   });
 
   nodeStream.pipe(res);
 }
 
-function sendProxyError(res, status, message, code) {
+async function writeConvertedResponse({ upstream, res, conversion, request, warnings }) {
+  const contentType = String(upstream.headers.get('content-type') || '').toLowerCase();
+  const isSse = contentType.includes('text/event-stream');
+  const wantsStream = Boolean(request.stream);
+
+  if (upstream.status >= 400) {
+    const text = await readUpstreamText(upstream);
+    const parsed = parseJson(text);
+    const { body: errorBody, contentType: errorContentType } = convertErrorBody({
+      clientProtocol: conversion.from,
+      body: parsed ?? text,
+    });
+    writeJson({
+      res,
+      status: upstream.status,
+      payload: errorBody,
+      contentType: errorContentType,
+      upstreamHeaders: upstream.headers,
+    });
+    return;
+  }
+
+  if (wantsStream && isSse) {
+    await writeConvertedStream({ upstream, res, conversion, request, warnings });
+    return;
+  }
+
+  if (wantsStream && !isSse) {
+    const upstreamBody = await readUpstreamJson(upstream);
+    const converted = convertResponse({
+      from: conversion.from,
+      to: conversion.to,
+      body: upstreamBody,
+      request,
+    });
+    warnings.push(...(converted.warnings ?? []));
+    const frames = synthesizeSse({ protocol: conversion.from, response: converted.body });
+    writeSse({
+      res,
+      status: upstream.status,
+      frames,
+      upstreamHeaders: upstream.headers,
+    });
+    return;
+  }
+
+  if (!wantsStream && isSse) {
+    const text = await readUpstreamText(upstream);
+    const upstreamBody = aggregateSse({ protocol: conversion.to, text });
+    const converted = convertResponse({
+      from: conversion.from,
+      to: conversion.to,
+      body: upstreamBody,
+      request,
+    });
+    warnings.push(...(converted.warnings ?? []));
+    writeJson({
+      res,
+      status: upstream.status,
+      payload: converted.body,
+      contentType: 'application/json; charset=utf-8',
+      upstreamHeaders: upstream.headers,
+    });
+    return;
+  }
+
+  const upstreamBody = await readUpstreamJson(upstream);
+  const converted = convertResponse({
+    from: conversion.from,
+    to: conversion.to,
+    body: upstreamBody,
+    request,
+  });
+  warnings.push(...(converted.warnings ?? []));
+  writeJson({
+    res,
+    status: upstream.status,
+    payload: converted.body,
+    contentType: 'application/json; charset=utf-8',
+    upstreamHeaders: upstream.headers,
+  });
+}
+
+async function writeConvertedStream({ upstream, res, conversion, request, warnings }) {
+  if (!upstream.body) {
+    res.writeHead(upstream.status, streamHeaders(upstream.headers));
+    res.end();
+    return;
+  }
+
+  const converter = createStreamConverter({
+    from: conversion.from,
+    to: conversion.to,
+    request,
+  });
+  const source = Readable.fromWeb(upstream.body);
+
+  res.writeHead(upstream.status, streamHeaders(upstream.headers));
+  res.flushHeaders?.();
+
+  try {
+    for await (const chunk of source) {
+      if (res.destroyed || res.writableEnded) break;
+      const output = converter.push(chunk);
+      if (output) await writeChunk(res, output);
+    }
+
+    const tail = converter.end();
+    if (tail) await writeChunk(res, tail);
+    if (Array.isArray(converter.warnings)) warnings.push(...converter.warnings);
+    if (!res.writableEnded) res.end();
+  } finally {
+    source.destroy();
+  }
+}
+
+function streamHeaders(headers) {
+  const result = responseHeaders(headers);
+  result['content-type'] = 'text/event-stream; charset=utf-8';
+  result['cache-control'] = 'no-cache';
+  delete result['content-length'];
+  return result;
+}
+
+function writeJson({ res, status, payload, contentType, upstreamHeaders }) {
+  if (res.writableEnded || res.destroyed) return;
+  const body = Buffer.from(JSON.stringify(payload));
+  const headers = responseHeaders(upstreamHeaders);
+  headers['content-type'] = contentType;
+  headers['content-length'] = body.length;
+  headers['cache-control'] = 'no-store';
+  res.writeHead(status, headers);
+  res.end(body);
+}
+
+function writeSse({ res, status, frames, upstreamHeaders }) {
+  if (res.writableEnded || res.destroyed) return;
+  const body = frames.join('');
+  const headers = responseHeaders(upstreamHeaders);
+  headers['content-type'] = 'text/event-stream; charset=utf-8';
+  headers['content-length'] = Buffer.byteLength(body);
+  headers['cache-control'] = 'no-cache';
+  res.writeHead(status, headers);
+  res.end(body);
+}
+
+async function writeChunk(res, text) {
+  if (res.destroyed || res.writableEnded) return;
+  if (res.write(text)) return;
+
+  await new Promise((resolve) => {
+    const done = () => {
+      res.off('drain', done);
+      res.off('close', done);
+      resolve();
+    };
+    res.once('drain', done);
+    res.once('close', done);
+  });
+}
+
+async function readUpstreamText(upstream, limit = MAX_CONVERTED_BYTES) {
+  if (!upstream.body) return '';
+  const stream = Readable.fromWeb(upstream.body);
+  const chunks = [];
+  let size = 0;
+
+  for await (const chunk of stream) {
+    size += chunk.length;
+    if (size > limit) {
+      stream.destroy();
+      throw new HttpError(502, '上游响应过大，无法转换', {
+        type: 'server_error',
+        code: 'upstream_response_too_large',
+      });
+    }
+    chunks.push(chunk);
+  }
+
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function readUpstreamJson(upstream) {
+  const text = await readUpstreamText(upstream);
+  const parsed = parseJson(text);
+  if (parsed === null) {
+    throw new HttpError(502, '上游返回了无效 JSON', {
+      type: 'server_error',
+      code: 'upstream_response_invalid',
+    });
+  }
+  return parsed;
+}
+
+function parseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function sendConversionError({ res, clientProtocol, status, message, code }) {
+  if (res.writableEnded || res.destroyed) return;
+
+  if (!res.headersSent) {
+    const payload = errorEnvelopeFor(clientProtocol, {
+      message,
+      type: 'invalid_request_error',
+      code: code ?? 'conversion_error',
+    });
+    writeJson({
+      res,
+      status,
+      payload,
+      contentType: 'application/json; charset=utf-8',
+      upstreamHeaders: new Headers(),
+    });
+    return;
+  }
+
+  const payload =
+    clientProtocol === 'anthropic'
+      ? { type: 'error', error: { type: 'server_error', message } }
+      : { error: { message, type: 'server_error', code: code ?? 'conversion_error' } };
+  const frame =
+    clientProtocol === 'anthropic'
+      ? formatSseEvent({ event: 'error', data: JSON.stringify(payload) })
+      : `data: ${JSON.stringify(payload)}\n\n`;
+
+  try {
+    res.write(frame);
+    res.end();
+  } catch {
+    res.destroy();
+  }
+}
+
+function sendProxyError({ res, status, message, code }) {
   if (res.writableEnded || res.destroyed) return;
   const body = Buffer.from(
     JSON.stringify({

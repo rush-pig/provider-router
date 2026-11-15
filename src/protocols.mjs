@@ -67,6 +67,11 @@ export function parseModelReference(model) {
   };
 }
 
+/** 只有登记在提供商 models 里的上游模型才允许路由。 */
+export function isModelRegistered(provider, modelId) {
+  return Array.isArray(provider?.models) && provider.models.includes(modelId);
+}
+
 function stripTrailingSlashes(pathname) {
   return pathname.replace(/\/+$/, '');
 }

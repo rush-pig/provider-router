@@ -56,14 +56,35 @@ curl http://127.0.0.1:4141/v1/chat/completions \
 网关会：
 
 1. 从 `model` 提取提供商与上游模型。
-2. 用提供商配置中的 API 基础地址拼接原请求路径，保留查询串。
+2. 用提供商配置中的 API 基础地址拼接请求路径；同协议透传时保留查询串，跨协议转换时改用目标协议的固定路径。
 3. 把请求体里的 `model` 改为去掉前缀后的上游模型，其余字段原样保留。
 4. 丢弃客户端自带的鉴权头（`authorization`、`api-key`、`x-api-key`、`x-goog-api-key`），按提供商协议写入上游密钥；其他端到端请求头（如 `anthropic-version`、`user-agent`）原样转发。
 5. 流式响应按块透传，SSE 不被缓冲。
+6. 客户端协议与提供商 `protocol` 不一致时，自动转换请求/响应（见下节）；同协议保持原样透传。
 
 传输层必须做的最小处理：移除 `Host`、`Content-Length`、逐跳头，并让 Node 的 fetch 重新协商压缩与长度；上游响应中相应的传输头会被规范化，避免解压后的响应长度不一致。
 
-`支持协议` 是提供商的接口标识，用于说明上游类型与模型目录读取方式；网关不做协议之间的消息格式转换。调用 Anthropic 提供商时请使用 `/v1/messages`，调用 OpenAI 兼容提供商时使用 `/v1/chat/completions`。
+网关只路由**已登记**的模型：上游模型 id 必须出现在该提供商的 `models` 列表里，否则返回 `404 model_not_registered`。在控制台“模型目录”页勾选即完成登记。
+
+### 自动协议转换
+
+网关按请求路径识别客户端协议：
+
+| 客户端路径 | 客户端协议 |
+| --- | --- |
+| `/v1/messages` | Anthropic Messages |
+| `/v1/chat/completions` | OpenAI Chat Completions |
+| `/v1/responses` | OpenAI Responses |
+
+目标协议由提供商的 `protocol` 决定：`openai`、`ollama` 视为 OpenAI Chat，`anthropic` 为 Anthropic Messages，`openai-responses` 为 Responses。客户端协议与目标协议不一致时自动转换，无需额外配置；`google` 与 `custom` 不转换，仍按原路径透传。
+
+支持六个方向：Anthropic ↔ OpenAI Chat、Anthropic ↔ OpenAI Responses、OpenAI Chat ↔ OpenAI Responses。转换覆盖 messages、system/instructions、tools/tool_choice、tool_use/tool_result、图片、stop/长度参数、usage 与流式 SSE 事件。
+
+- **thinking**：Anthropic `thinking` 会映射为 OpenAI 的 `reasoning_effort` / `reasoning.effort`；跨协议往返时只有带签名的 thinking 块通过内部签名桥保留，普通 reasoning 不伪造 Anthropic 签名。
+- **缓存**：目标为 Anthropic 且发生转换时，网关自动注入最多 4 个 `cache_control` 断点（tools、system、最近消息、较早的 user 消息），并剥离 Claude Code 轮换的 billing header，避免破坏前缀缓存；目标为 OpenAI/Responses 时丢弃 `cache_control`，自动前缀缓存是否命中由上游决定。
+- **无法映射的字段**：丢弃并在请求日志的 `conversionWarnings` 中记录 code/字段名；`previous_response_id` 不转发，依赖服务端 Responses 状态的续轮可能缺少上文。
+- **count_tokens**：`/v1/messages/count_tokens` 只在目标同为 Anthropic 时透传；跨协议 token 数无法准确换算，返回 400 `conversion_unsupported_endpoint`。
+- **错误**：转换失败返回 422 `conversion_error`；请求本身无效返回 400；上游错误保留原状态码，只把错误体转换成客户端协议的结构。
 
 ## 配置文件
 
@@ -104,8 +125,8 @@ curl http://127.0.0.1:4141/v1/chat/completions \
 - `baseUrl`：API 基础地址，例如 `https://api.openai.com/v1`。不要填完整 endpoint；程序会把请求路径拼到它后面，并自动避免重复的 `/v1` 段。
 - `apiKey`：转发时写入上游鉴权头。客户端自带的鉴权头会被丢弃，避免下游密钥外泄；留空则不发送鉴权头，适配本地无鉴权服务。
 - `authStyle`：鉴权方式，`auto`（默认，按协议）、`bearer`、`api-key`、`x-api-key`、`x-goog-api-key`、`none`。Azure 这类要求 `api-key` 的自定义网关可显式指定。
-- `protocol`：`openai`、`openai-responses`、`anthropic`、`google`、`ollama`、`custom`。默认鉴权头依次为 `Authorization: Bearer`、`Authorization: Bearer`、`x-api-key`、`x-goog-api-key`、`Authorization: Bearer`、`Authorization: Bearer`。
-- `models`：本地登记模型 id，可包含 `/`；用于模型目录补全与离线回退。
+- `protocol`：`openai`、`openai-responses`、`anthropic`、`google`、`ollama`、`custom`。默认鉴权头依次为 `Authorization: Bearer`、`Authorization: Bearer`、`x-api-key`、`x-goog-api-key`、`Authorization: Bearer`、`Authorization: Bearer`。同时决定跨协议转换的目标格式：`openai`/`ollama` 视为 OpenAI Chat，`google`/`custom` 不转换。
+- `models`：已登记的上游模型 id，可包含 `/`，同时是路由白名单——未登记的模型请求会被拒绝。在控制台“模型目录”页勾选或手动添加即写入这里。
 - `enabled`：停用后不会再被路由，也不会出现在目录聚合结果中。
 
 控制台不会把完整 API Key 发给浏览器，只显示是否配置以及末四位提示。编辑时留空即保持原密钥；勾选“清除已保存的密钥”可删除。
@@ -113,9 +134,9 @@ curl http://127.0.0.1:4141/v1/chat/completions \
 ## 集中模型目录
 
 ```http
-GET /models
-GET /v1/models
-GET /api/models?refresh=1
+GET /models             # 客户端用，只返回已登记（可路由）的模型
+GET /v1/models          # 同上
+GET /api/models?refresh=1  # 控制台用，返回全部并带 registered 标记
 ```
 
 网关会并发请求每个启用提供商的模型目录，并合并结果：
@@ -123,6 +144,8 @@ GET /api/models?refresh=1
 - OpenAI/Anthropic 兼容：`GET <baseUrl>/models`，鉴权头与转发时一致；Anthropic 会附带标准 `anthropic-version`。
 - Google Gemini：`GET <baseUrl>/models`，解析 `models[].name` 并去掉 `models/` 前缀。
 - Ollama：读取 `<baseUrl 去掉 /v1>/api/tags`。
+
+控制台“模型目录”页每一行都有勾选框：勾选即把该上游模型 id 写入提供商的 `models`（路由白名单），取消勾选则移出。前端客户端调用 `/models`、`/v1/models` 只会看到已登记的模型。
 
 返回是 OpenAI 风格的 `{ object: "list", data: [...] }`。每个条目包含：
 
@@ -134,11 +157,14 @@ GET /api/models?refresh=1
   "provider": "openrouter",
   "upstream_id": "anthropic/claude-sonnet-4.5",
   "display_name": "Claude Sonnet 4.5",
-  "source": "live"
+  "source": "live",
+  "registered": true
 }
 ```
 
-同时返回 `providers` 状态与 `errors`。某个提供商拉取失败时，不会影响其他提供商；它会回退到本地 `models` 列表（`source: "configured"`），并在 `errors` 中报告原因。成功结果缓存 60 秒，`?refresh=1` 可强制刷新。上游失败短暂缓存 15 秒，避免连续请求反复打到故障上游。
+同时返回 `providers` 状态与 `errors`。某个提供商拉取失败时，不会影响其他提供商；它会回退到该提供商已登记的 `models`（`source: "configured"`），并在 `errors` 中报告原因。成功结果缓存 60 秒，`?refresh=1` 可强制刷新。上游失败短暂缓存 15 秒，避免连续请求反复打到故障上游。
+
+不实现 `/models` 的上游不会出现在列表里：在目录页的“提供商”筛选里选中它，然后用下方输入框手动添加模型 id，点“添加并登记”。
 
 ## 管理接口
 
@@ -245,6 +271,7 @@ src/
   upstream.mjs     上游模型目录读取与聚合缓存
   proxy.mjs        JSON 请求改写与流式转发
   catalog.mjs      内置目录与可选 pi-ai 集成
+  convert/         跨协议请求/响应/流式转换
   autostart.mjs    跨平台登录自启
   logs.mjs         内存日志与统计
   util.mjs         错误类型、参数解析、JSON 响应
@@ -260,9 +287,15 @@ test/              Node 原生测试
 
 ## 故障排查
 
-**上游返回 401/403**：先看模型目录测试返回的错误摘要；若提示鉴权失败，检查提供商的协议与鉴权方式是否匹配（例如 Azure 需要 `authStyle: api-key`），以及 `baseUrl` 是否包含正确的版本路径。
+**上游返回 401/403**：模型目录页的错误栈会显示拉取失败原因；若提示鉴权失败，检查提供商的协议与鉴权方式是否匹配（例如 Azure 需要 `authStyle: api-key`），以及 `baseUrl` 是否包含正确的版本路径。
 
-**模型目录为空**：有些兼容网关不实现 `/models`。在提供商编辑框中手动填写模型列表即可；路由不依赖模型列表是否包含目标模型。
+**请求返回 404 `model_not_registered`**：该模型还没登记。到“模型目录”页勾选它，或在选中该提供商后手动添加并登记，然后重试。
+
+**模型目录为空**：有些兼容网关不实现 `/models`。在“模型目录”页选中该提供商，用输入框手动添加模型 id 并登记。
+
+**请求返回 422 `conversion_error`**：客户端协议与提供商 `protocol` 不一致时会自动转换；若某个字段无法映射，日志的 `conversionWarnings` 会给出 code。必要时改用与客户端协议相同的提供商，或调整请求字段。
+
+**`/v1/messages/count_tokens` 返回 400 `conversion_unsupported_endpoint`**：跨协议无法准确换算 token 数，只有目标同为 Anthropic 时才支持。
 
 **SSE 不流式**：确认没有在网关与客户端之间再套一层会缓冲响应的反向代理。网关本身逐块 pipe 上游响应。
 

@@ -14,7 +14,7 @@ import {
   toast,
 } from './dom.js';
 import { loadLogs, renderLogs } from './logs.js';
-import { loadModels, renderModels } from './models.js';
+import { bindModelViewEvents, loadModels, renderModels } from './models.js';
 import {
   buildProviderPayload,
   closeProviderDialog,
@@ -23,9 +23,7 @@ import {
   openProviderDialog,
   populateProtocolOptions,
   showFormError,
-  testProviderForm,
   updateAuthHint,
-  updateModelCount,
   updateProtocolHint,
 } from './provider-dialog.js';
 import { handleAutostartChange } from './settings.js';
@@ -327,7 +325,6 @@ function bindEvents() {
   $('#autostart-toggle')?.addEventListener('change', handleAutostartChange);
 
   $('#model-search')?.addEventListener('input', renderModels);
-  $('#model-provider-filter')?.addEventListener('change', renderModels);
   $('#log-search')?.addEventListener('input', renderLogs);
   $('#log-status-filter')?.addEventListener('change', renderLogs);
 
@@ -353,11 +350,10 @@ function bindEvents() {
   }
 
   $('#provider-form')?.addEventListener('submit', saveProviderForm);
-  $('#test-provider')?.addEventListener('click', testProviderForm);
   $('#preset-select')?.addEventListener('change', handlePresetSelection);
   $('#field-protocol')?.addEventListener('change', updateProtocolHint);
   $('#field-auth-style')?.addEventListener('change', updateAuthHint);
-  $('#field-models')?.addEventListener('input', updateModelCount);
+  bindModelViewEvents();
   $('#field-api-key')?.addEventListener('input', () => {
     if ($('#field-api-key')?.value) {
       const clear = $('#field-clear-key');

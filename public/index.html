@@ -256,7 +256,7 @@
           <div class="section-heading">
             <div>
               <h2>模型目录</h2>
-              <p>汇总所有提供商的 /models 返回结果，并保留本地登记的模型。</p>
+              <p>勾选即登记到提供商的模型列表；只有登记过的模型才允许路由。</p>
             </div>
             <button class="button button-outline" type="button" id="refresh-models">
               <svg class="icon"><use href="#icon-refresh"></use></svg>
@@ -276,6 +276,11 @@
               </select>
             </label>
             <span class="toolbar-note" id="models-summary">—</span>
+          </div>
+
+          <div class="model-manual hidden" id="model-manual">
+            <input id="model-manual-input" type="search" placeholder="手动添加模型 id，可包含斜杠" autocomplete="off" spellcheck="false" />
+            <button class="button button-quiet" type="button" id="model-manual-add">添加并登记</button>
           </div>
 
           <div id="model-errors" class="error-stack"></div>
@@ -489,25 +494,13 @@ sudo loginctl enable-linger "$USER"</code></pre>
             清除已保存的密钥
           </label>
 
-          <label class="field">
-            <span>模型列表</span>
-            <textarea id="field-models" rows="7" placeholder="每行一个模型 id，可包含斜杠"></textarea>
-            <small><span id="model-count">0</span> 个模型，可逐行编辑，也可从上游拉取。</small>
-          </label>
-
           <label class="inline-check">
             <input type="checkbox" id="field-enabled" checked />
             启用此提供商
           </label>
-
-          <div class="discover-result hidden" id="discover-result"></div>
         </div>
 
         <footer class="modal-foot">
-          <button class="button button-quiet" type="button" id="test-provider">
-            <svg class="icon"><use href="#icon-refresh"></use></svg>
-            测试并拉取模型
-          </button>
           <div class="spacer"></div>
           <button class="button button-quiet" type="button" data-close-dialog>取消</button>
           <button class="button button-dark" type="submit" id="save-provider">保存提供商</button>

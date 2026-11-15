@@ -15,7 +15,8 @@ import {
   validateProvider,
 } from './config.mjs';
 import { addLog, clearLogs, completeLog, getRecentLogs, getStats, listLogs } from './logs.mjs';
-import { PROTOCOLS, parseModelReference } from './protocols.mjs';
+import { PROTOCOLS, isModelRegistered, parseModelReference } from './protocols.mjs';
+import { planConversion } from './convert/detect.mjs';
 import { proxyRequest } from './proxy.mjs';
 import { aggregateModels, fetchProviderModels, invalidateModelCache } from './upstream.mjs';
 import {
@@ -382,13 +383,18 @@ async function main() {
     }
   }
 
-  async function handleModels(req, res, url) {
+  async function handleModels(req, res, url, { registeredOnly = false } = {}) {
     if (req.method !== 'GET') throw methodNotAllowed(req.method);
     const refresh = ['1', 'true', 'yes'].includes(
       String(url.searchParams.get('refresh') || '').toLowerCase(),
     );
     const result = await aggregateModels(config.providers, { refresh });
-    sendJson(res, 200, result);
+    if (!registeredOnly) {
+      sendJson(res, 200, result);
+      return;
+    }
+    const data = result.data.filter((model) => model.registered);
+    sendJson(res, 200, { ...result, data, count: data.length });
   }
 
   async function handleProxy(req, res, url) {
@@ -423,12 +429,32 @@ async function main() {
         code: 'provider_disabled',
       });
     }
+    if (!isModelRegistered(provider, ref.model)) {
+      throw new HttpError(
+        404,
+        `模型 "${ref.model}" 未在提供商 "${ref.provider}" 登记；请在控制台“模型目录”页勾选后重试`,
+        { type: 'invalid_request_error', code: 'model_not_registered' },
+      );
+    }
+
+    const conversion = planConversion({
+      pathname: url.pathname,
+      providerProtocol: provider.protocol,
+    });
+    if (conversion?.error === 'unsupported_endpoint') {
+      throw new HttpError(
+        400,
+        '该端点不支持跨协议转换；请使用 /v1/messages、/v1/chat/completions 或 /v1/responses',
+        { type: 'invalid_request_error', code: 'conversion_unsupported_endpoint' },
+      );
+    }
 
     const logId = addLog({
       method: req.method,
       path: url.pathname,
       provider: provider.name,
       model: ref.model,
+      conversion: conversion ? `${conversion.from}->${conversion.to}` : null,
     });
     const startedAt = Date.now();
 
@@ -441,17 +467,19 @@ async function main() {
         modelReference: ref,
         pathname: url.pathname,
         search: url.search,
-        onComplete: ({ status, error, durationMs }) => {
+        conversion,
+        onComplete: ({ status, error, durationMs, warnings }) => {
           completeLog(logId, {
             status,
             error,
             durationMs: durationMs ?? Date.now() - startedAt,
+            warnings,
           });
         },
       });
     } catch (error) {
       completeLog(logId, {
-        status: 500,
+        status: error instanceof HttpError ? error.status : 500,
         error: error.message,
         durationMs: Date.now() - startedAt,
       });
@@ -644,7 +672,7 @@ async function main() {
     }
 
     if (pathname === '/models' || pathname === '/v1/models') {
-      await handleModels(req, res, url);
+      await handleModels(req, res, url, { registeredOnly: true });
       return;
     }
 

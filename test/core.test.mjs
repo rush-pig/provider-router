@@ -3,6 +3,7 @@ import test from 'node:test';
 import { validateProvider, publicProvider } from '../src/config.mjs';
 import {
   getModelsEndpoint,
+  isModelRegistered,
   joinUpstreamUrl,
   parseModelReference,
 } from '../src/protocols.mjs';
@@ -84,6 +85,15 @@ test('model payload parsing supports common provider shapes', () => {
     [{ id: 'qwen3:8b', name: 'qwen3:8b' }],
   );
   assert.deepEqual(idsFromPayload({}, 'openai'), []);
+});
+
+test('only registered models are routable', () => {
+  const provider = { models: ['gpt-4.1', 'org/nested-model:v2'] };
+  assert.equal(isModelRegistered(provider, 'gpt-4.1'), true);
+  assert.equal(isModelRegistered(provider, 'org/nested-model:v2'), true);
+  assert.equal(isModelRegistered(provider, 'gpt-4.1-mini'), false);
+  assert.equal(isModelRegistered({ models: [] }, 'gpt-4.1'), false);
+  assert.equal(isModelRegistered({}, 'gpt-4.1'), false);
 });
 
 test('provider validation normalizes and deduplicates configuration', () => {

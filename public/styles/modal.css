@@ -185,30 +185,3 @@
   line-height: 1.55;
 }
 
-.discover-result {
-  padding: 10px 12px;
-  border: 1px solid var(--line-strong);
-  border-left: 3px solid var(--info);
-  border-radius: 2px;
-  background: var(--info-wash);
-  color: var(--info);
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.discover-result.is-error {
-  border-left-color: var(--bad);
-  background: var(--bad-wash);
-  color: #7e2d22;
-}
-
-.discover-result.is-ok {
-  border-left-color: var(--ok);
-  background: var(--ok-wash);
-  color: var(--ok);
-}
-
-.discover-result code {
-  font-size: 10px;
-}
-

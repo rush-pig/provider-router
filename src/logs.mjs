@@ -20,6 +20,8 @@ export function addLog(entry = {}) {
     path: entry.path ?? '',
     provider: entry.provider ?? null,
     model: entry.model ?? null,
+    conversion: entry.conversion ?? null,
+    conversionWarnings: [],
     status: null,
     durationMs: null,
     error: null,
@@ -32,12 +34,16 @@ export function addLog(entry = {}) {
   return log.id;
 }
 
-export function completeLog(id, { status, error = null, durationMs = 0 }) {
+export function completeLog(
+  id,
+  { status, error = null, durationMs = 0, warnings = [] },
+) {
   const log = logs.find((item) => item.id === id);
   if (!log || log.completed) return;
 
   log.status = Number(status) || 0;
   log.error = error ? String(error) : null;
+  log.conversionWarnings = normalizeWarnings(warnings);
   log.durationMs = Math.max(0, Math.round(durationMs));
   log.completed = true;
 
@@ -85,4 +91,14 @@ export function getStats() {
 
 export function getRecentLogs(limit = 6) {
   return listLogs(limit);
+}
+
+function normalizeWarnings(warnings) {
+  if (!Array.isArray(warnings)) return [];
+  return warnings.slice(0, 20).map((warning) => {
+    const entry = { code: String(warning?.code ?? 'conversion_warning') };
+    if (warning?.field) entry.field = String(warning.field);
+    if (Number.isFinite(warning?.count)) entry.count = warning.count;
+    return entry;
+  });
 }

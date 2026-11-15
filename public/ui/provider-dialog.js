@@ -3,7 +3,7 @@
  */
 
 import { api } from './api.js';
-import { $, formatDuration, setButtonBusy, setText } from './dom.js';
+import { $, setText } from './dom.js';
 import {
   AUTH_STYLE_HEADERS,
   FALLBACK_AUTH_STYLES,
@@ -94,7 +94,6 @@ export function openProviderDialog(provider = null) {
   state.editingProvider = provider;
   form.reset();
   hideFormError();
-  hideDiscoverResult();
   $('#clear-key-row')?.classList.add('hidden');
   if ($('#field-clear-key')) $('#field-clear-key').checked = false;
 
@@ -118,7 +117,6 @@ export function openProviderDialog(provider = null) {
     $('#field-base-url').value = provider.baseUrl || '';
     $('#field-protocol').value = provider.protocol || 'openai';
     $('#field-auth-style').value = provider.authStyle || 'auto';
-    setModelsArea(provider.models || []);
     $('#field-enabled').checked = Boolean(provider.enabled);
     $('#field-api-key').value = '';
     $('#field-api-key').placeholder = provider.hasApiKey
@@ -137,7 +135,6 @@ export function openProviderDialog(provider = null) {
     $('#field-base-url').value = '';
     $('#field-protocol').value = state.protocols[0]?.id || 'openai';
     $('#field-auth-style').value = 'auto';
-    setModelsArea([]);
     $('#field-enabled').checked = true;
     $('#field-api-key').value = '';
     $('#field-api-key').placeholder = '粘贴上游 api-key';
@@ -145,7 +142,6 @@ export function openProviderDialog(provider = null) {
   }
 
   updateProtocolHint();
-  updateModelCount();
   dialog.showModal();
   document.body.classList.add('modal-open');
 
@@ -246,7 +242,6 @@ export function handlePresetSelection() {
   $('#field-protocol').value = state.protocols.some((item) => item.id === preset.protocol)
     ? preset.protocol
     : 'custom';
-  setModelsArea(preset.models || []);
   updateProtocolHint();
   if (!preset.baseUrl) {
     setText('#preset-hint', '该目录项没有预置 API 地址，请补全后再保存。');
@@ -254,39 +249,9 @@ export function handlePresetSelection() {
   } else {
     setText(
       '#preset-hint',
-      `${preset.source === 'pi-ai' ? 'pi-ai' : '内置'}目录已载入；模型列表可以继续编辑。`,
+      `${preset.source === 'pi-ai' ? 'pi-ai' : '内置'}目录已载入；保存后到“模型目录”页勾选要启用的模型。`,
     );
   }
-}
-
-function parseModelsArea() {
-  return [
-    ...new Set(
-      String($('#field-models')?.value || '')
-        .split(/\r?\n/)
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
-  ];
-}
-
-function setModelsArea(models) {
-  const seen = new Set();
-  const lines = [];
-  for (const model of models) {
-    const value = String(model ?? '').trim();
-    if (!value || seen.has(value)) continue;
-    seen.add(value);
-    lines.push(value);
-  }
-  const area = $('#field-models');
-  if (area) area.value = lines.join('\n');
-  updateModelCount();
-}
-
-/** 更新表单中的模型计数。 */
-export function updateModelCount() {
-  setText('#model-count', String(parseModelsArea().length));
 }
 
 /**
@@ -308,77 +273,6 @@ export function hideFormError() {
   if (element) element.classList.add('hidden');
 }
 
-function hideDiscoverResult() {
-  const element = $('#discover-result');
-  if (!element) return;
-  element.classList.add('hidden');
-  element.classList.remove('is-error', 'is-ok');
-  element.textContent = '';
-}
-
-function showDiscoverResult(type, message) {
-  const element = $('#discover-result');
-  if (!element) return;
-  element.classList.remove('hidden', 'is-error', 'is-ok');
-  if (type === 'error') element.classList.add('is-error');
-  if (type === 'ok') element.classList.add('is-ok');
-  element.textContent = message;
-}
-
-/** 测试表单中的上游连接，并把发现的模型合并进模型列表。 */
-export async function testProviderForm() {
-  const button = $('#test-provider');
-  hideFormError();
-  hideDiscoverResult();
-  const baseUrl = $('#field-base-url')?.value.trim();
-  const protocol = $('#field-protocol')?.value || 'openai';
-  const authStyle = $('#field-auth-style')?.value || 'auto';
-  const apiKey = $('#field-api-key')?.value || '';
-  const clearKey = $('#field-clear-key')?.checked || false;
-  if (!baseUrl) {
-    showFormError('请先填写 API 接口地址。');
-    $('#field-base-url')?.focus();
-    return;
-  }
-
-  setButtonBusy(button, true, '正在连接…');
-  try {
-    const payload = {
-      baseUrl,
-      protocol,
-      authStyle,
-      apiKey,
-    };
-    if (state.editingProvider?.name && !apiKey && !clearKey) {
-      payload.reuseKeyFrom = state.editingProvider.name;
-    }
-    const result = await api('/api/discover-models', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    if (!result?.ok) {
-      showDiscoverResult('error', `连接失败：${result?.error || '未知错误'}`);
-      return;
-    }
-    const found = (result.models || []).map((model) => model.id).filter(Boolean);
-    if (found.length) {
-      const merged = [...parseModelsArea(), ...found];
-      setModelsArea(merged);
-    }
-    const suffix = found.length
-      ? '，已合并到模型列表。'
-      : '，上游没有返回模型；当前列表保持不变。';
-    showDiscoverResult(
-      'ok',
-      `连接成功，返回 ${result.count ?? found.length} 个模型，耗时 ${formatDuration(result.latencyMs)}${suffix}`,
-    );
-  } catch (error) {
-    showDiscoverResult('error', `连接失败：${error.message}`);
-  } finally {
-    setButtonBusy(button, false);
-  }
-}
-
 /** @returns {object} 由弹窗表单字段组装出的提供商请求体。 */
 export function buildProviderPayload() {
   const name = $('#field-name')?.value.trim() || '';
@@ -387,11 +281,10 @@ export function buildProviderPayload() {
   const protocol = $('#field-protocol')?.value || 'openai';
   const authStyle = $('#field-auth-style')?.value || 'auto';
   const apiKey = $('#field-api-key')?.value || '';
-  const models = parseModelsArea();
   const enabled = Boolean($('#field-enabled')?.checked);
   const clearKey = Boolean($('#field-clear-key')?.checked);
 
-  const payload = { name, label, baseUrl, protocol, authStyle, models, enabled };
+  const payload = { name, label, baseUrl, protocol, authStyle, enabled };
   if (apiKey) payload.apiKey = apiKey;
   else if (state.editingProvider && clearKey) payload.clearApiKey = true;
   return payload;

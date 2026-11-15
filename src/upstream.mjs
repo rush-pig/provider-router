@@ -233,6 +233,7 @@ export async function aggregateModels(providers, { refresh = false } = {}) {
         upstream_id: clean,
         display_name: clean,
         source: 'configured',
+        registered: true,
       });
     }
 
@@ -248,6 +249,7 @@ export async function aggregateModels(providers, { refresh = false } = {}) {
           upstream_id: model.id,
           display_name: model.name || model.id,
           source: 'live',
+          registered: byUpstreamId.get(model.id)?.registered === true,
         });
       }
     }

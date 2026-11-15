@@ -67,7 +67,7 @@
   }
 
   .model-row {
-    grid-template-columns: minmax(220px, 1.3fr) minmax(140px, 0.9fr) 95px 75px 32px;
+    grid-template-columns: 30px minmax(220px, 1.3fr) minmax(140px, 0.9fr) 95px 75px 32px;
     gap: 11px;
   }
 }
@@ -191,7 +191,7 @@
   }
 
   .model-row {
-    grid-template-columns: minmax(190px, 1.25fr) minmax(125px, 0.8fr) 30px;
+    grid-template-columns: 30px minmax(190px, 1.25fr) minmax(125px, 0.8fr) 30px;
   }
 
   .model-row > .model-name,
@@ -334,7 +334,7 @@
   }
 
   .model-row {
-    grid-template-columns: minmax(0, 1fr) 30px;
+    grid-template-columns: 30px minmax(0, 1fr) 30px;
     gap: 8px;
     padding: 10px 11px;
   }

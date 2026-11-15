@@ -141,18 +141,20 @@ export function renderModels() {
   });
 
   const liveCount = all.filter((model) => model.source === 'live').length;
+  const registeredCount = all.filter((model) => model.registered).length;
   const suffix = filtered.length === all.length ? '' : ` · 显示 ${filtered.length}`;
   setText(
     '#models-summary',
-    `${all.length} 个路由${suffix} · 实时 ${liveCount} · 本地 ${all.length - liveCount}`,
+    `${all.length} 个路由${suffix} · 已登记 ${registeredCount} · 实时 ${liveCount} · 本地 ${all.length - liveCount}`,
   );
+  updateManualAddVisibility();
 
   if (!all.length) {
     const hasProviders = state.providers.length > 0;
     container.innerHTML = `
       <div class="empty-state">
         <strong>${hasProviders ? '还没有可用模型' : '还没有提供商'}</strong>
-        <p>${hasProviders ? '提供商没有返回模型，且本地模型列表为空。可以编辑提供商并补充模型，或稍后重试。' : '先添加一个提供商，模型目录会自动汇总到这里。'}</p>
+        <p>${hasProviders ? '上游没有返回模型，也没有登记过的模型。选择提供商后可手动添加模型 id，或稍后重试。' : '先添加一个提供商，模型目录会自动汇总到这里。'}</p>
         <button class="button ${hasProviders ? 'button-outline' : 'button-dark'}" type="button" data-action="${hasProviders ? 'retry-models' : 'add-provider'}">
           ${hasProviders ? `${icon('refresh')}重新读取` : `${icon('plus')}添加提供商`}
         </button>
@@ -173,6 +175,9 @@ export function renderModels() {
     .map(
       (model) => `
         <div class="model-row">
+          <label class="model-check" title="${model.registered ? '已登记；取消勾选后不再允许路由' : '勾选后登记该模型，允许路由'}">
+            <input type="checkbox" data-register-model data-provider="${esc(model.provider)}" data-upstream-id="${esc(model.upstream_id)}"${model.registered ? ' checked' : ''} aria-label="登记 ${esc(model.id)}" />
+          </label>
           <div class="model-id">
             <code title="${esc(model.id)}">${esc(model.id)}</code>
           </div>
@@ -185,4 +190,130 @@ export function renderModels() {
         </div>`,
     )
     .join('');
+}
+
+function updateManualAddVisibility() {
+  const block = $('#model-manual');
+  if (!block) return;
+  block.classList.toggle('hidden', !$('#model-provider-filter')?.value);
+}
+
+function setRegistered(providerName, models) {
+  const provider = state.providers.find((item) => item.name === providerName);
+  if (provider) provider.models = models;
+  for (const model of state.models?.data || []) {
+    if (model.provider !== providerName) continue;
+    model.registered = models.includes(model.upstream_id);
+  }
+}
+
+async function saveProviderModels(provider, models) {
+  const data = await api(`/api/providers/${encodeURIComponent(provider.name)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ models }),
+  });
+  const next = Array.isArray(data?.provider?.models) ? data.provider.models : models;
+  setRegistered(provider.name, next);
+  return next;
+}
+
+async function toggleRegistration(box) {
+  const providerName = box.dataset.provider || '';
+  const upstreamId = box.dataset.upstreamId || '';
+  const provider = state.providers.find((item) => item.name === providerName);
+  if (!provider || !upstreamId) {
+    box.checked = !box.checked;
+    return;
+  }
+
+  const current = Array.isArray(provider.models) ? provider.models : [];
+  const next = box.checked
+    ? [...new Set([...current, upstreamId])]
+    : current.filter((id) => id !== upstreamId);
+
+  box.disabled = true;
+  try {
+    await saveProviderModels(provider, next);
+    renderModels();
+    updateModelProviderFilter();
+  } catch (error) {
+    box.checked = !box.checked;
+    toast(error.message, 'error');
+  } finally {
+    box.disabled = false;
+  }
+}
+
+async function addManualModel() {
+  const providerName = $('#model-provider-filter')?.value || '';
+  const input = $('#model-manual-input');
+  const id = String(input?.value || '').trim();
+  if (!providerName) {
+    toast('先在“提供商”筛选里选择一个提供商', 'error');
+    return;
+  }
+  if (!id) {
+    input?.focus();
+    return;
+  }
+
+  const provider = state.providers.find((item) => item.name === providerName);
+  if (!provider) {
+    toast('提供商不存在，请刷新后重试', 'error');
+    return;
+  }
+
+  const current = Array.isArray(provider.models) ? provider.models : [];
+  if (current.includes(id)) {
+    toast('该模型已登记', 'error');
+    if (input) input.value = '';
+    return;
+  }
+
+  try {
+    await saveProviderModels(provider, [...current, id]);
+    const list = state.models?.data;
+    if (
+      Array.isArray(list) &&
+      !list.some((model) => model.provider === providerName && model.upstream_id === id)
+    ) {
+      list.push({
+        id: `${providerName}/${id}`,
+        object: 'model',
+        owned_by: providerName,
+        provider: providerName,
+        provider_label: provider.label,
+        upstream_id: id,
+        display_name: id,
+        source: 'configured',
+        registered: true,
+      });
+    }
+    if (input) input.value = '';
+    renderModels();
+    updateModelProviderFilter();
+    toast(`已登记 ${id}`);
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+/** 绑定目录页的勾选登记、提供商筛选与手动添加。 */
+export function bindModelViewEvents() {
+  $('#model-list')?.addEventListener('change', (event) => {
+    const box = event.target.closest('[data-register-model]');
+    if (box) toggleRegistration(box);
+  });
+
+  $('#model-provider-filter')?.addEventListener('change', () => {
+    updateManualAddVisibility();
+    renderModels();
+  });
+
+  $('#model-manual-add')?.addEventListener('click', addManualModel);
+  $('#model-manual-input')?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addManualModel();
+  });
 }
